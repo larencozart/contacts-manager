@@ -48,13 +48,13 @@ td a {
   font-weight: bold;
   padding: 0.5rem 1.5rem;
   text-decoration: none;
+  text-align: center;
 }
 
-tfoot,
-tfoot tr,
-tfoot td {
+tfoot, tfoot tr, tfoot td {
   background-color: #d0f0f0;
   border: none;
+  text-align: center;
 }
 
 tfoot {
@@ -66,8 +66,7 @@ tfoot a {
   margin-top: 2rem;
 }
 
-td a:hover,
-td a:active {
+td a:hover, td a:active {
   background-color: #f08080;
 }
 
