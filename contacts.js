@@ -139,9 +139,7 @@ app.post("/contacts/new",
   // handle errors
   (req, res, next) => {
     if (res.locals.errorMessages.length > 0) {
-      res.render("new-contact", {
-        errorMessages: res.locals.errorMessages,
-      });
+      res.render("new-contact", {...res.locals});
     } else {
       next();
     }
