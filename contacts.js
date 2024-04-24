@@ -1,8 +1,13 @@
 const express = require("express");
 const morgan = require("morgan");
-const app = express();
+const {body, validationResult} = require("express-validator");
+const session = require("express-session");
+const store = require("connect-loki");
 
-let contactData = [
+const app = express();
+const LokiStore = store(session);
+
+const contactData = [
   {
     firstName: "Mike",
     lastName: "Jones",
@@ -41,12 +46,37 @@ const sortContacts = contacts => {
   });
 };
 
+const clone = object => {
+  return JSON.parse(JSON.stringify(object));
+}
+
 app.set("views", "./views");
 app.set("view engine", "pug");
 
 app.use(express.static("public"));
 app.use(express.urlencoded({extended: false}));
 app.use(morgan("common"));
+app.use(session({
+  cookie: {
+    httpOnly: true,
+    maxAge: 31 * 24 * 60 * 60 * 1000, // 31 days in milliseconds
+    path: "/",
+    secure: false,
+  }, 
+  name: "launch-school-contacts-manager-session-id",
+  resave: false,
+  saveUninitialized: true,
+  secret: "this is not very secure",
+  store: new LokiStore({}),
+}));
+
+app.use((req, res, next) => {
+  if (!("contactData" in req.session)) {
+    req.session.contactData = clone(contactData);
+  }
+
+  next();
+});
 
 app.get("/", (req, res) => {
   res.redirect("/contacts");
@@ -54,7 +84,7 @@ app.get("/", (req, res) => {
 
 app.get("/contacts", (req, res) => {
   res.render("contacts", {
-    contacts: sortContacts(contactData)
+    contacts: sortContacts(req.session.contactData)
   });
 });
 
@@ -66,86 +96,46 @@ const isAlphabetic = (text) => /^[a-z]+$/i.test(text);
 const phoneNumberIsFormatted = (phoneNum) => {
   return /^[0-9]{3}-[0-9]{3}-[0-9]{4}$/.test(phoneNum);
 }
+const validateName = (name, whichName) => {
+  return body(name)
+    .trim()
+    .isLength({ min: 1 })
+    .withMessage(`${whichName} name is required.`)
+    .bail()
+    .isLength({ max: 25 })
+    .withMessage(`${whichName} name is too long. Maximum length is 25 characters.`)
+    .isAlpha()
+    .withMessage(`${whichName} name contains invalid characters. The name must be alphabetic.`);
+};
 
 app.post("/contacts/new",
-  // create errorMessage obj
-  (req, res, next) => {
-    res.locals.errorMessages = [];
-    next();
-  },
-  // trim whitespace of all entries
-  (req, res, next) => {
-    Object.keys(req.body).forEach(key => {
-      res.locals[key] = req.body[key].trim();
-    });
+  [
+    validateName("firstName", "First"),
+    validateName("lastName", "Last"),
 
-    next();
-  },
-  // validate firstName
+    body("phoneNumber")
+      .trim()
+      .isLength({min: 1})
+      .withMessage("Phone number is required")
+      .bail()
+      .matches(/^\d\d\d-\d\d\d-\d\d\d\d$/)
+      .withMessage("Invalid phone number format. Use ###-###-####."),
+  ],
   (req, res, next) => {
-    let firstName = res.locals.firstName;
-    // length must be greater than 0
-    if (firstName.length === 0) {
-      res.locals.errorMessages.push("First name is required.");
-    // chars must all be alphabetic
-    } else if (!isAlphabetic(firstName)) {
-      res.locals.errorMessages.push("Only enter alphabetic characters for First Name");
-    // length must be shorter than 25 chars
-    } else if (firstName.length > 25) {
-      res.locals.errorMessages.push("Enter a First Name of 25 characters or less");
-    } 
-
-    next();
-  },
-  // validate lastName
-  (req, res, next) => {
-    let lastName = res.locals.lastName;
-    if (lastName.length === 0) {
-      res.locals.errorMessages.push("Last name is required.");
-    } else if (!isAlphabetic(lastName)) {
-      res.locals.errorMessages.push("Only enter alphabetic characters for Last Name");
-    // length must be shorter than 25 chars
-    } else if (lastName.length > 25) {
-      res.locals.errorMessages.push("Enter a Last Name of 25 characters or less");
-    } 
-
-    next();
-  },
-  // validate phoneNumber
-  (req, res, next) => {
-    let phoneNumber = res.locals.phoneNumber;
-    if (phoneNumber.length === 0) {
-      res.locals.errorMessages.push("Phone number is required.");
-      // match correct us phone pattern
-    } else if (!phoneNumberIsFormatted(phoneNumber)) {
-      res.locals.errorMessages.push("Format your phone number as follows: ###-###-####");
-    }
-
-    next();
-  },
-  // handle duplicates
-  (req, res, next) => { // check for duplicates
-    let fullName = `${res.locals.firstName} ${res.locals.lastName}`;
-    let foundContact = contactData.find(contact => {
-      return `${contact.firstName} ${contact.lastName}` === fullName;
-    });
-
-    if (foundContact) {
-      res.locals.errorMessages.push(`${fullName} is already on your contact list. Duplicates are not allowed.`);
-    }
-
-    next();
-  },
-  // handle errors
-  (req, res, next) => {
-    if (res.locals.errorMessages.length > 0) {
-      res.render("new-contact", {...res.locals});
+    let errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.render("new-contact", {
+        errorMessages: errors.array().map(error => error.msg),
+        firstName: req.body.firstName,
+        lastName: req.body.lastName,
+        phoneNumber: req.body.phoneNumber
+      })
     } else {
       next();
     }
   },
   (req, res) => {
-    contactData.push({...req.body});
+    req.session.contactData.push({...req.body});
     res.redirect("/contacts");
   });
 
