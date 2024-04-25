@@ -3,6 +3,7 @@ const morgan = require("morgan");
 const {body, validationResult} = require("express-validator");
 const session = require("express-session");
 const store = require("connect-loki");
+const flash = require("express-flash");
 
 const app = express();
 const LokiStore = store(session);
@@ -70,11 +71,18 @@ app.use(session({
   store: new LokiStore({}),
 }));
 
+app.use(flash());
 app.use((req, res, next) => {
   if (!("contactData" in req.session)) {
     req.session.contactData = clone(contactData);
   }
 
+  next();
+});
+
+app.use((req, res, next) => {
+  res.locals.flash = req.session.flash;
+  delete req.session.flash;
   next();
 });
 
@@ -92,10 +100,10 @@ app.get("/contacts/new", (req, res) => {
   res.render("new-contact");
 });
 
-const isAlphabetic = (text) => /^[a-z]+$/i.test(text);
-const phoneNumberIsFormatted = (phoneNum) => {
-  return /^[0-9]{3}-[0-9]{3}-[0-9]{4}$/.test(phoneNum);
-}
+// const isAlphabetic = (text) => /^[a-z]+$/i.test(text);
+// const phoneNumberIsFormatted = (phoneNum) => {
+//   return /^[0-9]{3}-[0-9]{3}-[0-9]{4}$/.test(phoneNum);
+// }
 const validateName = (name, whichName) => {
   return body(name)
     .trim()
@@ -124,18 +132,23 @@ app.post("/contacts/new",
   (req, res, next) => {
     let errors = validationResult(req);
     if (!errors.isEmpty()) {
+      errors.array().forEach(error => req.flash("error", error.msg));
+
       res.render("new-contact", {
+        flash: req.flash(),
         errorMessages: errors.array().map(error => error.msg),
         firstName: req.body.firstName,
         lastName: req.body.lastName,
         phoneNumber: req.body.phoneNumber
-      })
+      });
     } else {
       next();
     }
   },
   (req, res) => {
     req.session.contactData.push({...req.body});
+
+    req.flash("success", "New contact added to list!");
     res.redirect("/contacts");
   });
 
