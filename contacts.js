@@ -100,10 +100,6 @@ app.get("/contacts/new", (req, res) => {
   res.render("new-contact");
 });
 
-// const isAlphabetic = (text) => /^[a-z]+$/i.test(text);
-// const phoneNumberIsFormatted = (phoneNum) => {
-//   return /^[0-9]{3}-[0-9]{3}-[0-9]{4}$/.test(phoneNum);
-// }
 const validateName = (name, whichName) => {
   return body(name)
     .trim()
